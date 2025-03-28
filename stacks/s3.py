@@ -6,11 +6,11 @@ from aws_cdk import (
     PhysicalName
 )
 
-class S3Stack(Stack):
+class ImageStorageS3Stack(Stack):
     def __init__(self, scope: Stack, id: str, **kwargs):
         super().__init__(scope, id, **kwargs)
 
-        self.bucket = s3.Bucket(
+        self.image_bucket = s3.Bucket(
             self, "ImageStorageBucket",
             bucket_name=PhysicalName.GENERATE_IF_NEEDED,
             removal_policy=RemovalPolicy.DESTROY,

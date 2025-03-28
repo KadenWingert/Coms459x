@@ -2,7 +2,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_iam as iam,
     aws_s3 as s3,
-    aws_s3_assets as s3_assets,
+    aws_s3_deployment as s3_deploy,
     Stack,
     CfnOutput
 )
@@ -14,21 +14,36 @@ class ImageHostingStack(Stack):
         scope: Stack,
         id: str,
         vpc: ec2.IVpc,
-        s3_bucket: s3.IBucket,
         iam_role: iam.IRole,
+        website_bucket: s3.IBucket,
         db_endpoint: str,
         **kwargs
     ):
         super().__init__(scope, id, **kwargs)
         
         self.vpc = vpc
-        self.bucket = s3_bucket
         self.role = iam_role
+        self.website_bucket = website_bucket
 
-        # Create asset for the index.html file
-        index_html_asset = s3_assets.Asset(
-            self, "IndexHtmlAsset",
-            path=os.path.join(os.path.dirname(__file__), "..", "index.html")
+        # Create a dedicated assets directory to avoid long path issues
+        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        os.makedirs(assets_dir, exist_ok=True)
+        
+        # Copy just the index.html to the assets directory
+        index_html_src = os.path.join(os.path.dirname(__file__), "..", "index.html")
+        index_html_dst = os.path.join(assets_dir, "index.html")
+        
+        if os.path.exists(index_html_src):
+            import shutil
+            shutil.copy2(index_html_src, index_html_dst)
+        
+        # Deploy only the index.html file to S3
+        s3_deploy.BucketDeployment(
+            self, "DeployWebsite",
+            sources=[s3_deploy.Source.asset(assets_dir)],
+            destination_bucket=self.website_bucket,
+            extract=False,
+            retain_on_delete=False
         )
 
         # Create Security Group
@@ -56,7 +71,7 @@ class ImageHostingStack(Stack):
         # Create EC2 instance
         web_server = ec2.Instance(
             self, "WebServer",
-            instance_type=ec2.InstanceType("t2.micro"),
+            instance_type=ec2.InstanceType("t2.micro"),  # Free tier eligible
             machine_image=ec2.AmazonLinuxImage(
                 generation=ec2.AmazonLinuxGeneration.AMAZON_LINUX_2
             ),
@@ -64,49 +79,39 @@ class ImageHostingStack(Stack):
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             security_group=security_group,
             role=self.role,
-            detailed_monitoring=True
+            detailed_monitoring=False  # Disable detailed monitoring to stay in free tier
         )
 
-        # Grant permissions
-        self.bucket.grant_read_write(web_server)
+        # Grant permissions to access the website bucket
+        self.website_bucket.grant_read_write(web_server)
 
-        # Define Flask app code
-        flask_app_code = """from flask import Flask, render_template
+        # Define Flask app code that redirects to S3
+        flask_app_code = """from flask import Flask, redirect
 import os
 
 app = Flask(__name__)
 
 @app.route("/")
 def index():
-    try:
-        if not os.path.exists(os.path.join(app.template_folder, 'index.html')):
-            return "Template not found at: " + os.path.join(app.template_folder, 'index.html'), 500
-        return render_template("index.html")
-    except Exception as e:
-        return "Error: {}".format(str(e)), 500
+    return redirect("http://YOUR_BUCKET_WEBSITE_ENDPOINT", code=302)
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=80)
 """
 
         user_data_script = f"""#!/bin/bash
 # Update and install dependencies
 yum update -y
 yum install -y python3-pip awscli
-pip3 install flask boto3 pymysql gunicorn
+pip3 install flask boto3
 
 # Create directory structure
-mkdir -p /home/ec2-user/app/templates
+mkdir -p /home/ec2-user/app
 
-# Download index.html from S3
-aws s3 cp s3://{index_html_asset.s3_bucket_name}/{index_html_asset.s3_object_key} /home/ec2-user/app/templates/index.html
-
-# Create Flask app
+# Create Flask app that redirects to S3
 cat > /home/ec2-user/app/app.py << 'EOF'
-{flask_app_code}
+{flask_app_code.replace("YOUR_BUCKET_WEBSITE_ENDPOINT", self.website_bucket.bucket_website_domain_name)}
 EOF
-
-# Set proper permissions
-chown -R ec2-user:ec2-user /home/ec2-user/app
-chmod 755 /home/ec2-user/app
-chmod 644 /home/ec2-user/app/templates/index.html
 
 # Create gunicorn start script
 cat > /home/ec2-user/app/start_server.sh << 'EOS'
@@ -151,13 +156,16 @@ sudo netstat -tulnp | grep 80
 """
 
         web_server.add_user_data(user_data_script)
-        
-        # Grant the instance permission to read the asset
-        index_html_asset.grant_read(iam_role)
 
-        # Output the public IP for easy access
+        # Output the public IP and website URL
         CfnOutput(
             self, "InstancePublicIp",
             value=web_server.instance_public_ip,
             description="Public IP address of the EC2 instance"
+        )
+        
+        CfnOutput(
+            self, "WebsiteURL",
+            value=self.website_bucket.bucket_website_url,
+            description="URL of the S3 hosted website"
         )
