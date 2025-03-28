@@ -19,23 +19,42 @@ function App() {
     setFile(event.target.files[0]);
   };
 
-  const handleUpload = async () => {
-    if (!file) {
-      alert("Please select a file.");
+const handleUpload = async () => {
+  if (!file) {
+    alert("Please select a file.");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = async () => {
+    const base64Data = reader.result.split(",")[1]; // Extract Base64 string
+
+    const payload = JSON.stringify({
+      action: "upload",
+      file_name: file.name,
+      file_data: base64Data,
+    });
+
+    const response = await fetch(`${apiUrl}/images`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: payload,
+    });
+
+    if (!response.ok) {
+      alert("Upload failed!");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await fetch(`${apiUrl}/upload`, {
-      method: "POST",
-      body: formData,
-    });
-
     const data = await response.json();
     setImageUrl(data.imageUrl);
+    console.log("SUCCESS");
   };
+};
+
 
   return (
     <div style={{ padding: "20px", textAlign: "center" }}>
