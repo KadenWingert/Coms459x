@@ -16,7 +16,7 @@ class ImageStorageS3Stack(Stack):
 
         # 1. Create S3 Bucket
         self.image_bucket = s3.Bucket(
-            self, "ImageStorageBucket",
+            self, "ImageStorageS3Stack",
             bucket_name=PhysicalName.GENERATE_IF_NEEDED,
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
