@@ -25,8 +25,11 @@ AFTER the stack finishes deploying, run this script (which is located in the hom
 
 ## 4. Destroy the stack
 To save costs, destroy the stack after you are done working on it by running
-``` cdk destroy ```
+``` cdk destroy --all  --force ```
 
 
 # Frontend Development
 Note that if you are ONLY doing changes on the frontend ui, can can cd to the website_assets directory and run `npm start` because the frontend is just a basic react app
+
+# Other
+Since we are using the AWS CDK, do NOT create/delete/modify resources from the console. Doing so will create what is called 'stack drift' and will mess things up, and can cause some headaches when trying to recreate/deploy the infrastructure.
