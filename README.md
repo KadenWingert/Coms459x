@@ -16,9 +16,12 @@
 ## 2. Bootstrap your AWS account (first time only):
 cdk bootstrap aws://945839052165/us-east-2
 
-## 3. Deploy the stack
-``` cdk deploy --all ```
-If you want to avoid the messages asking for your apporval to provision certain resources, run `cdk deploy --all --require-approval never`
+## 3. Run Script to get the API_Gateway URL and Deplyo the stack
+I created a script named deploy_and_generate_config.sh that can be run with the command ./deploy_and_generate_config \
+```cdk deploy --all --require-approval never --profile kadenwin ```
+```python ../write_config.py ``` \
+You may need to change the profile to your actaul profile name
+
 
 ## 4. Destroy the stack
 To save costs, destroy the stack after it is created by running
