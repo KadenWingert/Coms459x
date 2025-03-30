@@ -2,89 +2,300 @@ import { useState, useEffect } from "react";
 
 function App() {
   const [file, setFile] = useState(null);
-  const [imageUrl, setImageUrl] = useState("");
+  const [images, setImages] = useState([]);
   const [apiUrl, setApiUrl] = useState("");
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
+    // Load API URL from config
     fetch("/config.json")
       .then((response) => response.json())
       .then((config) => {
-        console.log("API URL:", config.API_URL);
         setApiUrl(config.API_URL);
+        // Load images immediately after API URL is set
+        fetchImages(config.API_URL);
       })
       .catch((error) => console.error("Error loading config:", error));
   }, []);
+
+  const fetchImages = async (apiUrl) => {
+    try {
+      setLoadingImages(true);
+      const response = await fetch(`${apiUrl}images`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch images");
+      }
+
+      const data = await response.json();
+      setImages(data.images || []);
+    } catch (error) {
+      console.error("Error fetching images:", error);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
   };
 
-const handleUpload = async () => {
-  if (!file) {
-    alert("Please select a file.");
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.readAsDataURL(file);
-  reader.onload = async () => {
-    const base64Data = reader.result.split(",")[1]; // Extract Base64 string
-
-    const payload = JSON.stringify({
-      action: "upload",
-      file_name: file.name,
-      file_data: base64Data,
-    });
-
-    const response = await fetch(`${apiUrl}/images`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: payload,
-    });
-
-    if (!response.ok) {
-      alert("Upload failed!");
+  const handleUpload = async () => {
+    if (!file || !apiUrl) {
+      alert("Please select a file and ensure API is configured");
       return;
     }
 
-    const data = await response.json();
-    setImageUrl(data.imageUrl);
-    console.log("SUCCESS");
-  };
-};
+    setUploading(true);
+    const reader = new FileReader();
 
+    reader.onload = async () => {
+      try {
+        const base64Data = reader.result.split(",")[1];
+
+        const response = await fetch(`${apiUrl}images`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file_name: file.name,
+            file_data: base64Data,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Upload failed");
+        }
+
+        const data = await response.json();
+        console.log("Upload successful:", data);
+
+        // Refresh the image list after successful upload
+        await fetchImages(apiUrl);
+        alert("Image uploaded successfully!");
+      } catch (error) {
+        console.error("Upload error:", error);
+        alert(`Upload failed: ${error.message}`);
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    reader.onerror = () => {
+      setUploading(false);
+      alert("Error reading file");
+    };
+
+    reader.readAsDataURL(file);
+  };
 
   return (
-    <div style={{ padding: "20px", textAlign: "center" }}>
-      <h1>Image Uploader</h1>
-      <input
-        type="file"
-        onChange={handleFileChange}
-        style={{ marginBottom: "10px", padding: "5px" }}
-      />
-      <button
-        onClick={handleUpload}
-        disabled={!apiUrl || !file} // Ensure button is enabled only when file and apiUrl are set
+    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
+      <h1 style={{ textAlign: "center", marginBottom: "30px" }}>
+        Image Gallery
+      </h1>
+
+      {/* Upload Section */}
+      <div
         style={{
-          padding: "10px 20px",
-          cursor: apiUrl && file ? "pointer" : "not-allowed",
-          backgroundColor: apiUrl && file ? "#4CAF50" : "#ddd",
-          color: apiUrl && file ? "white" : "#777",
-          border: "none",
-          borderRadius: "4px",
+          backgroundColor: "#f5f5f5",
+          padding: "20px",
+          borderRadius: "8px",
+          marginBottom: "30px",
+          position: "relative", // For loading overlay
         }}
       >
-        Upload
-      </button>
+        {/* Loading overlay during upload */}
+        {uploading && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(255,255,255,0.7)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 10,
+            }}
+          >
+            <div
+              style={{
+                padding: "20px",
+                backgroundColor: "#fff",
+                borderRadius: "8px",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-block",
+                  width: "40px",
+                  height: "40px",
+                  border: "4px solid #f3f3f3",
+                  borderTop: "4px solid #3498db",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  marginBottom: "10px",
+                }}
+              ></div>
+              <p>Uploading your image...</p>
+            </div>
+          </div>
+        )}
 
-      {imageUrl && (
-        <div>
-          <h2>Uploaded Image:</h2>
-          <img src={imageUrl} alt="Uploaded" width="300" />
-        </div>
-      )}
+        <h2>Upload New Image</h2>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          disabled={uploading}
+          style={{
+            margin: "10px 0",
+            padding: "10px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            width: "100%",
+            opacity: uploading ? 0.7 : 1,
+          }}
+        />
+        <button
+          onClick={handleUpload}
+          disabled={!apiUrl || !file || uploading}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: !apiUrl || !file || uploading ? "#ddd" : "#4CAF50",
+            color: !apiUrl || !file || uploading ? "#777" : "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: !apiUrl || !file || uploading ? "not-allowed" : "pointer",
+            fontSize: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+          }}
+        >
+          {uploading ? (
+            <>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: "16px",
+                  height: "16px",
+                  border: "2px solid #f3f3f3",
+                  borderTop: "2px solid #3498db",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                }}
+              ></span>
+              Uploading...
+            </>
+          ) : (
+            "Upload Image"
+          )}
+        </button>
+      </div>
+
+      {/* Image Gallery Section */}
+      <div>
+        <h2 style={{ marginBottom: "20px" }}>Your Images</h2>
+        {loadingImages ? (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              height: "200px",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                border: "4px solid #f3f3f3",
+                borderTop: "4px solid #3498db",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+              }}
+            ></div>
+          </div>
+        ) : images.length === 0 ? (
+          <p>No images found. Upload your first image!</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            {images.map((image) => (
+              <div
+                key={image.key}
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  position: "relative",
+                }}
+              >
+                <img
+                  src={`data:image/jpeg;base64,${image.data}`}
+                  alt={image.key}
+                  style={{
+                    width: "100%",
+                    height: "200px",
+                    objectFit: "cover",
+                  }}
+                />
+                <div style={{ padding: "10px" }}>
+                  <p
+                    style={{
+                      margin: "0",
+                      fontSize: "14px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {image.key}
+                  </p>
+                  <p
+                    style={{
+                      margin: "5px 0 0",
+                      fontSize: "12px",
+                      color: "#666",
+                    }}
+                  >
+                    Uploaded: {new Date(image.lastModified).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add CSS for spinner animation */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -2,96 +2,103 @@ import boto3
 import os
 import base64
 import json
+from botocore.exceptions import ClientError
 
-s3 = boto3.client('s3')
-
-# CORS Headers
-CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",  # Allow any origin
-    "Access-Control-Allow-Methods": "OPTIONS, GET, POST, DELETE",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Content-Type": "application/json"
-}
-
-def upload_image_to_s3(file_name, bucket_name, file_data=None):
-    """Uploads an image to S3."""
-    if file_data:
-        # Fix incorrect padding if needed
-        missing_padding = len(file_data) % 4
-        if missing_padding:
-            file_data += '=' * (4 - missing_padding)  # Add necessary padding
-        
-        # Decode base64 data if provided
-        file_data = base64.b64decode(file_data)
-        file_name_with_extension = file_name.split('.')[0] + '.jpg'  # Ensure a proper extension
-
-        # Upload to S3
-        s3.put_object(Bucket=bucket_name, Key=file_name_with_extension, Body=file_data)
-        return file_name_with_extension
-    else:
-        if os.path.exists(file_name):  # Handle file upload from Lambda storage
-            with open(file_name, 'rb') as f:
-                s3.upload_fileobj(f, bucket_name, file_name)
-            return file_name
-        else:
-            raise Exception("File does not exist in /tmp or the path provided.")
-
-def get_image_from_s3(bucket_name, file_name):
-    """Retrieves an image from S3."""
-    local_file_path = f"/tmp/{file_name}"
-    s3.download_file(bucket_name, file_name, local_file_path)
-    return local_file_path
-
-def delete_image_from_s3(bucket_name, file_name):
-    """Deletes an image from S3."""
-    s3.delete_object(Bucket=bucket_name, Key=file_name)
-
-
+s3_client = boto3.client('s3')
+kms_client = boto3.client('kms')
 
 def lambda_handler(event, context):
     bucket_name = os.environ['BUCKET_NAME']
+    cmk_arn = os.environ['KMS_KEY_ARN']
 
-    # ✅ Handle CORS Preflight Requests
-    if event["httpMethod"] == "OPTIONS":
-        return {
-            "statusCode": 200,
-            "headers": {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "OPTIONS, GET, POST, DELETE",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization"
-            },
-            "body": json.dumps({"message": "CORS preflight success"})
-        }
-
-    try:
-        body = json.loads(event.get("body", "{}"))
-    except json.JSONDecodeError:
-        return {
-            "statusCode": 400,
-            "headers": {"Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"error": "Invalid JSON format"})
-        }
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization"
+    }
 
     if event["httpMethod"] == "POST":
-        file_name = body.get("file_name")
-        file_data = body.get("file_data")
-
-        if not file_name or not file_data:
+        try:
+            body = json.loads(event.get("body", "{}"))
+            file_name = body.get("file_name")
+            file_data = body.get("file_data")
+            
+            if not file_name or not file_data:
+                return {
+                    "statusCode": 400,
+                    "headers": cors_headers,
+                    "body": json.dumps({"error": "Missing file_name or file_data"}) 
+                }
+            
+            # Decode base64 image data
+            image_data = base64.b64decode(file_data)
+            
+            # Encrypt directly with KMS (for small files <4KB)
+            encrypted = kms_client.encrypt(
+                KeyId=cmk_arn,
+                Plaintext=image_data
+            )
+            
+            # Store encrypted data in S3
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=file_name,
+                Body=encrypted['CiphertextBlob'],
+                Metadata={
+                    'x-amz-meta-encryption-method': 'KMS_DIRECT'
+                }
+            )
+            
             return {
-                "statusCode": 400,
-                "headers": {"Access-Control-Allow-Origin": "*"},
-                "body": json.dumps({"error": "Missing 'file_name' or 'file_data'"})
+                "statusCode": 200,
+                "headers": cors_headers,
+                "body": json.dumps({
+                    "message": "Image encrypted and stored successfully",
+                    "file_name": file_name
+                })
             }
-
-        uploaded_file = upload_image_to_s3(file_name, bucket_name, file_data)
-        return {
-            "statusCode": 200,
-            "headers": {"Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"message": f"Image '{uploaded_file}' uploaded successfully!"})
-        }
+            
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "headers": cors_headers,
+                "body": json.dumps({"error": str(e)})
+            }
     
-    return {
-        "statusCode": 400,
-        "headers": {"Access-Control-Allow-Origin": "*"},
-        "body": json.dumps({"error": "Invalid HTTP method"})
-    }
+    elif event["httpMethod"] == "GET":
+        try:
+            # For GET requests, you'll need to implement decryption
+            # Note: This is simplified - you'll need to adjust based on your needs
+            response = s3_client.list_objects_v2(Bucket=bucket_name)
+            images = []
+            
+            if 'Contents' in response:
+                for item in response['Contents']:
+                    # Get the encrypted object
+                    obj = s3_client.get_object(Bucket=bucket_name, Key=item['Key'])
+                    ciphertext = obj['Body'].read()
+                    
+                    # Decrypt with KMS
+                    decrypted = kms_client.decrypt(
+                        KeyId=cmk_arn,
+                        CiphertextBlob=ciphertext
+                    )
+                    
+                    images.append({
+                        'key': item['Key'],
+                        'data': base64.b64encode(decrypted['Plaintext']).decode('utf-8'),
+                        'lastModified': item['LastModified'].isoformat()
+                    })
+            
+            return {
+                "statusCode": 200,
+                "headers": cors_headers,
+                "body": json.dumps({"images": images})
+            }
+            
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "headers": cors_headers,
+                "body": json.dumps({"error": str(e)})
+            }
