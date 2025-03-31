@@ -14,7 +14,7 @@
 ``` pip install -r requirements.txt ```
 
 ## 2. Bootstrap your AWS account (first time only):
-cdk bootstrap aws://945839052165/us-east-2
+cdk bootstrap aws://945839052165/us-east-1
 
 ## 3. Deploy the stack
 cdk ```deploy --all --require-approval never``` 

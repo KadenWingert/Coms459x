@@ -8,7 +8,9 @@ from aws_cdk import (
     PhysicalName,
     RemovalPolicy,
     aws_kms as kms,
-    Duration
+    Duration,
+        PhysicalName,  # no need to reference 'core' here
+    RemovalPolicy,
 )
 
 
@@ -25,7 +27,6 @@ class ImageStorageS3Stack(Stack):
             policy=self.create_kms_key_policy()
         )
 
-        # 1. Create S3 Bucket
         self.image_bucket = s3.Bucket(
             self, "ImageStorageS3Stack",
             bucket_name=PhysicalName.GENERATE_IF_NEEDED,
@@ -34,20 +35,8 @@ class ImageStorageS3Stack(Stack):
             versioned=False,
             encryption=s3.BucketEncryption.KMS,
             encryption_key=self.cmk,
-            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-            cors=[
-                s3.CorsRule(
-                    allowed_origins=["*"],
-                    allowed_methods=[
-                        s3.HttpMethods.GET,
-                        s3.HttpMethods.PUT,
-                        s3.HttpMethods.POST,
-                        s3.HttpMethods.DELETE
-                    ],
-                    allowed_headers=["*"],
-                    max_age=300
-                )
-            ]
+            object_ownership=s3.ObjectOwnership.OBJECT_WRITER,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL  # Block all public access
         )
 
 
@@ -60,14 +49,15 @@ class ImageStorageS3Stack(Stack):
             code=_lambda.Code.from_asset("lambda"),
             environment={
                 "BUCKET_NAME": self.image_bucket.bucket_name,
-                "KMS_KEY_ARN": self.cmk.key_arn  # Make sure to add this
+                "KMS_KEY_ARN": self.cmk.key_arn  
             },
-            timeout=Duration.seconds(30)
-            # Remove layers parameter
+            timeout=Duration.seconds(30),
         )
         # Grant Lambda permissions
-        self.image_bucket.grant_read_write(lambda_function)
+        self.image_bucket.grant_read(lambda_function)
+        self.image_bucket.grant_put(lambda_function)
         self.cmk.grant_encrypt_decrypt(lambda_function)
+
 
 
         # 3. Create API Gateway
@@ -92,7 +82,7 @@ class ImageStorageS3Stack(Stack):
 
         lambda_integration = apigateway.LambdaIntegration(
     lambda_function,
-    proxy=True  # ✅ Use proxy integration to handle CORS in Lambda
+    proxy=True
 )
 
         images = api.root.add_resource("images")

@@ -6,7 +6,7 @@ from stacks.website import WebsiteS3Stack
 app = App()
 
 # Define environment
-env = Environment(account="945839052165", region="us-east-2")
+env = Environment(account="945839052165", region="us-east-1")
 
 # Create foundational stacks
 vpc_stack = VpcStack(app, "VpcStack", env=env)

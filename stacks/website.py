@@ -32,13 +32,6 @@ class WebsiteS3Stack(Stack):
             )
         )
 
-        # Inject API URL dynamically into config.json
-        config_path = os.path.join(build_dir, "config.json")
-        with open(config_path, "w") as config_file:
-            json.dump({"API_URL": api_url}, config_file)
-        print(f"🔍 API_URL received in CDK Stack: {api_url}")  
-            
-
         # Deploy the built website to S3
         s3_deploy.BucketDeployment(
             self, "DeployWebsite",

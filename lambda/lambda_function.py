@@ -3,102 +3,139 @@ import os
 import base64
 import json
 from botocore.exceptions import ClientError
+import logging
 
+# Initialize clients
 s3_client = boto3.client('s3')
-kms_client = boto3.client('kms')
+kms_client = boto3.client('kms')  # KMS client to perform encryption and decryption
+bucket_name = os.environ['BUCKET_NAME']
+kms_key_arn = os.environ['KMS_KEY_ARN']
+
+cors_headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization"
+}
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 def lambda_handler(event, context):
-    bucket_name = os.environ['BUCKET_NAME']
-    cmk_arn = os.environ['KMS_KEY_ARN']
+    logger.info("Lambda handler invoked.")
 
-    cors_headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization"
-    }
+    query_params = event.get("queryStringParameters") or {}
 
     if event["httpMethod"] == "POST":
-        try:
-            body = json.loads(event.get("body", "{}"))
-            file_name = body.get("file_name")
-            file_data = body.get("file_data")
-            
-            if not file_name or not file_data:
-                return {
-                    "statusCode": 400,
-                    "headers": cors_headers,
-                    "body": json.dumps({"error": "Missing file_name or file_data"}) 
-                }
-            
-            # Decode base64 image data
-            image_data = base64.b64decode(file_data)
-            
-            # Encrypt directly with KMS (for small files <4KB)
-            encrypted = kms_client.encrypt(
-                KeyId=cmk_arn,
-                Plaintext=image_data
-            )
-            
-            # Store encrypted data in S3
-            s3_client.put_object(
-                Bucket=bucket_name,
-                Key=file_name,
-                Body=encrypted['CiphertextBlob'],
-                Metadata={
-                    'x-amz-meta-encryption-method': 'KMS_DIRECT'
-                }
-            )
-            
-            return {
-                "statusCode": 200,
-                "headers": cors_headers,
-                "body": json.dumps({
-                    "message": "Image encrypted and stored successfully",
-                    "file_name": file_name
-                })
-            }
-            
-        except Exception as e:
-            return {
-                "statusCode": 500,
-                "headers": cors_headers,
-                "body": json.dumps({"error": str(e)})
-            }
-    
+        return store_image(event)
     elif event["httpMethod"] == "GET":
-        try:
-            # For GET requests, you'll need to implement decryption
-            # Note: This is simplified - you'll need to adjust based on your needs
-            response = s3_client.list_objects_v2(Bucket=bucket_name)
-            images = []
-            
-            if 'Contents' in response:
-                for item in response['Contents']:
-                    # Get the encrypted object
-                    obj = s3_client.get_object(Bucket=bucket_name, Key=item['Key'])
-                    ciphertext = obj['Body'].read()
-                    
-                    # Decrypt with KMS
-                    decrypted = kms_client.decrypt(
-                        KeyId=cmk_arn,
-                        CiphertextBlob=ciphertext
-                    )
-                    
-                    images.append({
-                        'key': item['Key'],
-                        'data': base64.b64encode(decrypted['Plaintext']).decode('utf-8'),
-                        'lastModified': item['LastModified'].isoformat()
-                    })
-            
+        if "key" in query_params:
+            return get_signed_url(query_params["key"])
+        else:
+            return retrieve_images()
+    else:
+        return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Unsupported method"})}
+
+
+def store_image(event):
+    try:
+        body = json.loads(event.get("body", "{}"))
+        file_name = body.get("file_name")
+        file_data = body.get("file_data")
+        logger.debug(f"File name: {file_name}")
+
+        if not file_name or not file_data:
+            return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Missing file_name or file_data"})}
+
+        # Decode base64 image data
+        image_data = base64.b64decode(file_data)
+        logger.debug(f"Image data length: {len(image_data)}")
+
+        # Encrypt metadata using AWS KMS
+        metadata = json.dumps({"file_name": file_name}).encode('utf-8')
+        response = kms_client.encrypt(
+            KeyId=kms_key_arn,
+            Plaintext=metadata
+        )
+        encrypted_metadata = base64.b64encode(response['CiphertextBlob']).decode('utf-8')
+
+        # Store image in S3
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=file_name,
+            Body=image_data,
+            Metadata={'encrypted_metadata': encrypted_metadata}
+        )
+
+        return {"statusCode": 200, "headers": cors_headers, "body": json.dumps({"message": "Image stored successfully", "file_name": file_name})}
+
+    except Exception as e:
+        logger.error(f"Error storing image: {e}")
+        return {"statusCode": 500, "headers": cors_headers, "body": json.dumps({"error": str(e)})}
+
+
+def get_signed_url(file_key):
+    logger.info("IN GET_SINGNED_URL.")
+    try:
+        signed_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": file_key},
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+        logger.info(f"GENERATED SIGNED URL: {signed_url}")
+
+
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": json.dumps({"signed_url": signed_url})
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate signed URL: {e}")
+        return {
+            "statusCode": 500,
+            "headers": cors_headers,
+            "body": json.dumps({"error": str(e)})
+        }
+
+
+def retrieve_images():
+    logger.info("IN RETRIEVE_IMAGES.")
+    try:
+        response = s3_client.list_objects_v2(Bucket=bucket_name)
+
+        if "Contents" not in response:
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({"images": images})
+                "body": json.dumps({"images": []})
             }
-            
-        except Exception as e:
-            return {
-                "statusCode": 500,
-                "headers": cors_headers,
-                "body": json.dumps({"error": str(e)})
-            }
+
+        images = []
+        for obj in response["Contents"]:
+            file_key = obj["Key"]
+            presigned_url = s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket_name, "Key": file_key},
+                ExpiresIn=3600  # URL valid for 1 hour
+            )
+
+            images.append({
+                "key": file_key,
+                "imageUrl": presigned_url,
+                "lastModified": obj["LastModified"].isoformat()
+            })
+
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": json.dumps({"images": images})
+        }
+
+    except ClientError as e:
+        logger.error(f"Failed to list images: {e}")
+        return {
+            "statusCode": 500,
+            "headers": cors_headers,
+            "body": json.dumps({"error": "Failed to retrieve images"})
+        }

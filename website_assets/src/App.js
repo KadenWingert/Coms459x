@@ -27,6 +27,7 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
+        mode: "cors",
       });
 
       if (!response.ok) {
@@ -34,7 +35,11 @@ function App() {
       }
 
       const data = await response.json();
-      setImages(data.images || []);
+      console.log("Fetched images:", data.images);
+      console.log("Fetched IMAGE 1:", data.images[0]);
+      console.log("Fetched IMAGE 1 url:", data.images[0].imageUrl);
+
+      setImages(data.images);
     } catch (error) {
       console.error("Error fetching images:", error);
     } finally {
@@ -77,8 +82,6 @@ function App() {
 
         const data = await response.json();
         console.log("Upload successful:", data);
-
-        // Refresh the image list after successful upload
         await fetchImages(apiUrl);
         alert("Image uploaded successfully!");
       } catch (error) {
@@ -94,7 +97,7 @@ function App() {
       alert("Error reading file");
     };
 
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(file); // This reads the file as a data URL (base64)
   };
 
   return (
@@ -241,50 +244,52 @@ function App() {
               gap: "20px",
             }}
           >
-            {images.map((image) => (
-              <div
-                key={image.key}
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: "8px",
-                  overflow: "hidden",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                  position: "relative",
-                }}
-              >
-                <img
-                  src={`data:image/jpeg;base64,${image.data}`}
-                  alt={image.key}
+            {images.map((image) => {
+              return (
+                <div
+                  key={image.key}
                   style={{
-                    width: "100%",
-                    height: "200px",
-                    objectFit: "cover",
+                    border: "1px solid #eee",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    position: "relative",
                   }}
-                />
-                <div style={{ padding: "10px" }}>
-                  <p
+                >
+                  <img
+                    src={image.imageUrl}
+                    alt={image.key}
                     style={{
-                      margin: "0",
-                      fontSize: "14px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      width: "100%",
+                      height: "200px",
+                      objectFit: "cover",
                     }}
-                  >
-                    {image.key}
-                  </p>
-                  <p
-                    style={{
-                      margin: "5px 0 0",
-                      fontSize: "12px",
-                      color: "#666",
-                    }}
-                  >
-                    Uploaded: {new Date(image.lastModified).toLocaleString()}
-                  </p>
+                  />
+                  <div style={{ padding: "10px" }}>
+                    <p
+                      style={{
+                        margin: "0",
+                        fontSize: "14px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {image.key}
+                    </p>
+                    <p
+                      style={{
+                        margin: "5px 0 0",
+                        fontSize: "12px",
+                        color: "#666",
+                      }}
+                    >
+                      Uploaded: {new Date(image.lastModified).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
