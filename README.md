@@ -32,4 +32,25 @@ To save costs, destroy the stack after you are done working on it by running
 Note that if you are ONLY doing changes on the frontend ui, can can cd to the website_assets directory and run `npm start` because the frontend is just a basic react app
 
 # Other
-Since we are using the AWS CDK, do NOT create/delete/modify resources from the console. Doing so will create what is called 'stack drift' and will mess things up, and can cause some headaches when trying to recreate/deploy the infrastructure.
+## Caution: Stack Drift
+ Since we are using the AWS CDK, do NOT create/delete/modify resources from the console. Doing so will create what is called 'stack drift' and will mess things up, and can cause some headaches when trying to recreate/deploy the infrastructure.
+
+ ## Explaining the KMS Encyption
+When an image is being stored via the store_image function, the metadata (which includes the file name) is first serialized into a JSON object and then encoded as a UTF-8 byte string.
+
+This metadata is then passed to the KMS encrypt() method, which uses a KMS encryption key (specified by kms_key_arn) to encrypt the plaintext metadata.
+``` python
+response = kms_client.encrypt(
+    KeyId=kms_key_arn,  # KMS key ARN used for encryption
+    Plaintext=metadata  # Plaintext metadata to be encrypted
+)
+```
+KMS returns the CiphertextBlob, which is the encrypted version of the metadata.
+
+The encrypted metadata is then base64-encoded so that it can be safely stored as a string in the S3 object metadata.
+
+```python
+encrypted_metadata = base64.b64encode(response['CiphertextBlob']).decode('utf-8')
+```
+
+
