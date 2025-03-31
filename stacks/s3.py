@@ -9,7 +9,7 @@ from aws_cdk import (
     RemovalPolicy,
     aws_kms as kms,
     Duration,
-        PhysicalName,  # no need to reference 'core' here
+    PhysicalName,  # no need to reference 'core' here
     RemovalPolicy,
 )
 

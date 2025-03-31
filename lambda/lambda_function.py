@@ -5,8 +5,13 @@ import json
 from botocore.exceptions import ClientError
 import logging
 
+from botocore.client import Config
+s3_client = boto3.client('s3', config=Config(signature_version='s3v4'))
+
+
 # Initialize clients
-s3_client = boto3.client('s3')
+# s3_client = boto3.client('s3')
+
 kms_client = boto3.client('kms')  # KMS client to perform encryption and decryption
 bucket_name = os.environ['BUCKET_NAME']
 kms_key_arn = os.environ['KMS_KEY_ARN']
