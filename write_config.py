@@ -10,17 +10,14 @@ lambda_client = session.client('lambda')
 
 stack_name = 'ImageStorageS3Stack'  
 
+# Find the Lambda function
 response = lambda_client.list_functions()
-
-
-# Find the Lambda function that starts with 'ImageHandlerLambda'
 lambda_function_name = None
 for function in response['Functions']:
     if function['FunctionName'].startswith('ImageHandlerLambda') and function['Runtime'].startswith('python'):
         lambda_function_name = function['FunctionName']
         break
 
-# Check if a function was found
 if lambda_function_name:
     print(f"Found function: {lambda_function_name}")
 
@@ -29,46 +26,53 @@ try:
     response = cloudformation.describe_stacks(StackName=stack_name)
     outputs = response['Stacks'][0]['Outputs']
 
-    # Initialize variable to store API URL
-    api_url = None
+    # Get API URL
+    api_url = next(
+        (output['OutputValue'] for output in outputs if output['OutputKey'] == 'ApiUrl'), 
+        None
+    )
 
-    # Search for API URL in the stack outputs
-    for output in outputs:
-        if output['OutputKey'] == 'ApiUrl':
-            api_url = output['OutputValue']
-
-    if api_url:
-        # Get list of all buckets in the current region
-        buckets_response = s3.list_buckets()
-        bucket_name = None
-
-        # Search for a bucket name that contains 'websitebucket'
-        for bucket in buckets_response['Buckets']:
-            if 'websitebucket' in bucket['Name']:
-                bucket_name = bucket['Name']
-                break
-
-        if bucket_name:
-            # Prepare config.json data
-            config_data = {'API_URL': api_url}
-            config_path = 'config.json'
-
-            # Write the config file locally
-            with open(config_path, 'w') as config_file:
-                json.dump(config_data, config_file)
-
-            print(f"✅ API URL written to {config_path}: {api_url}")
-
-            # Upload config.json to S3 bucket
-            s3.upload_file(config_path, bucket_name, 'config.json')
-            print(f"✅ config.json uploaded to S3 bucket: {bucket_name}")
-
-        else:
-            print("❌ No S3 bucket found with 'websitebucket' in its name.")
-    else:
+    if not api_url:
         print("❌ API URL output not found in stack.")
+        exit(1)
 
-except boto3.exceptions.S3UploadFailedError as e:
-    print(f"🚨 S3 Upload Error: {e}")
+    # Find the website bucket
+    buckets_response = s3.list_buckets()
+    bucket_name = next(
+        (bucket['Name'] for bucket in buckets_response['Buckets'] if 'websitebucket' in bucket['Name']),
+        None
+    )
+
+    if not bucket_name:
+        print("❌ No S3 bucket found with 'websitebucket' in its name.")
+        exit(1)
+
+    # Config data to write
+    config_data = {'API_URL': api_url}
+
+    # --- Update both config.json locations ---
+    config_locations = [
+        'config.json',          # Root level
+        'website_assets/public/config.json'    # Public folder (for React/Vue apps)
+    ]
+
+    for config_path in config_locations:
+        # 1. Write locally (optional)
+        with open(config_path, 'w') as config_file:
+            json.dump(config_data, config_file)
+        print(f"✅ Local {config_path} updated")
+
+        # 2. Upload to S3
+        try:
+            s3.upload_file(
+                Filename=config_path,
+                Bucket=bucket_name,
+                Key=config_path
+            )
+            print(f"✅ Uploaded {config_path} to S3 bucket: {bucket_name}")
+        except Exception as e:
+            print(f"⚠️ Failed to upload {config_path}: {str(e)}")
+
 except Exception as e:
-    print(f"🚨 An error occurred: {e}")
+    print(f"🚨 Error: {e}")
+    exit(1)
