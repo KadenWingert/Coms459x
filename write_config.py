@@ -3,7 +3,7 @@ import json
 import os
 
 # Ensure to use the session correctly for both profile and region
-session = boto3.Session(profile_name='kadenwin', region_name='us-east-1')
+session = boto3.Session(profile_name='crun', region_name='us-east-1')
 cloudformation = session.client('cloudformation')
 s3 = session.client('s3')  
 lambda_client = session.client('lambda')

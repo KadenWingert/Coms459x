@@ -37,6 +37,8 @@ def lambda_handler(event, context):
             return get_signed_url(query_params["key"])
         else:
             return retrieve_images()
+    elif event["httpMethod"] == "DELETE":
+        return delete_image(event)
     else:
         return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Unsupported method"})}
 
@@ -143,4 +145,30 @@ def retrieve_images():
             "statusCode": 500,
             "headers": cors_headers,
             "body": json.dumps({"error": "Failed to retrieve images"})
+        }
+    
+def delete_image(event):
+    try:
+        #the key is the name of the image you wish to delete
+        query_params = event.get("queryStringParameters") or {}
+        file_key = query_params.get("key")
+
+        if not file_key:
+            return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Missing 'key' parameter"})}
+
+        #try and delete the bucket via the key
+        s3_client.delete_object(Bucket=bucket_name, Key=file_key)
+
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": json.dumps({"message": f"Image '{file_key}' deleted successfully"})
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to delete image: {e}")
+        return {
+            "statusCode": 500,
+            "headers": cors_headers,
+            "body": json.dumps({"error": str(e)})
         }

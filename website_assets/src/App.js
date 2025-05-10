@@ -6,6 +6,7 @@ function App() {
   const [apiUrl, setApiUrl] = useState("");
   const [loadingImages, setLoadingImages] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     // Load API URL from config
@@ -99,6 +100,42 @@ function App() {
 
     reader.readAsDataURL(file); // This reads the file as a data URL (base64)
   };
+
+  const handleDelete = async () => {
+    if (!file || !apiUrl) return;
+    setDeleting(true);
+    console.log("Disabled?", !apiUrl || !file || deleting);
+    console.log({ apiUrl, file, deleting });  
+    
+    try {
+      const response = await fetch(`${apiUrl}images?key=${encodeURIComponent(file.name)}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+        body: JSON.stringify({
+          file_name: file.name,
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Delete failed");
+      }
+
+      const data = await response.json();
+      console.log("Delete successful:", data);
+      await fetchImages(apiUrl);
+      alert("Delete successful");
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert(`Delete failed: ${error.message}`);
+    } finally {
+      setDeleting(false);
+    }
+
+  }
 
   return (
     <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
@@ -286,6 +323,43 @@ function App() {
                     >
                       Uploaded: {new Date(image.lastModified).toLocaleString()}
                     </p>
+                    <button
+                      onClick={handleDelete}
+                      disabled={!apiUrl || !file || deleting}
+                      //disabled={false}
+                      style={{
+                        padding: "10px 20px",
+                        backgroundColor: !apiUrl || !file || deleting ? "#f5b5b5" : "#e02424",
+                        color: !apiUrl || !file || deleting ? "#777" : "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: !apiUrl || !file || deleting ? "not-allowed" : "pointer",
+                        fontSize: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      {deleting ? (
+                        <>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "16px",
+                              height: "16px",
+                              border: "2px solid #f3f3f3",
+                              borderTop: "2px solid #3498db",
+                              borderRadius: "50%",
+                              animation: "spin 1s linear infinite",
+                            }}
+                          ></span>
+                          Deleting
+                        </>
+                      ) : (
+                        "Delete Image"
+                      )}
+                    </button>
                   </div>
                 </div>
               );
