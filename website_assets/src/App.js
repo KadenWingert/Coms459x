@@ -210,7 +210,8 @@ function App() {
             opacity: uploading ? 0.7 : 1,
           }}
         />
-        <button
+        <div style={{display: "flex", gap: "20px"}}>
+          <button
           onClick={handleUpload}
           disabled={!apiUrl || !file || uploading}
           style={{
@@ -225,27 +226,65 @@ function App() {
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
-          }}
-        >
-          {uploading ? (
-            <>
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "16px",
-                  height: "16px",
-                  border: "2px solid #f3f3f3",
-                  borderTop: "2px solid #3498db",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              ></span>
-              Uploading...
-            </>
-          ) : (
-            "Upload Image"
-          )}
-        </button>
+            }}
+          >
+            {uploading ? (
+              <>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "16px",
+                    height: "16px",
+                    border: "2px solid #f3f3f3",
+                    borderTop: "2px solid #3498db",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite",
+                  }}
+                ></span>
+                Uploading...
+              </>
+            ) : (
+              "Upload Image"
+            )}
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!apiUrl || !file || deleting}
+            //disabled={false}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: !apiUrl || !file || deleting ? "#f5b5b5" : "#e02424",
+                color: !apiUrl || !file || deleting ? "#777" : "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: !apiUrl || !file || deleting ? "not-allowed" : "pointer",
+                fontSize: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+              }}
+              >
+              {deleting ? (
+                <>
+                  <span
+                      style={{
+                        display: "inline-block",
+                        width: "16px",
+                        height: "16px",
+                        border: "2px solid #f3f3f3",
+                        borderTop: "2px solid #3498db",
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                      }}
+                  ></span>
+                    Deleting
+                </>
+                ) : (
+                "Delete Images"
+              )}
+          </button>
+        </div>
       </div>
 
       {/* Image Gallery Section */}
@@ -323,43 +362,6 @@ function App() {
                     >
                       Uploaded: {new Date(image.lastModified).toLocaleString()}
                     </p>
-                    <button
-                      onClick={handleDelete}
-                      disabled={!apiUrl || !file || deleting}
-                      //disabled={false}
-                      style={{
-                        padding: "10px 20px",
-                        backgroundColor: !apiUrl || !file || deleting ? "#f5b5b5" : "#e02424",
-                        color: !apiUrl || !file || deleting ? "#777" : "white",
-                        border: "none",
-                        borderRadius: "4px",
-                        cursor: !apiUrl || !file || deleting ? "not-allowed" : "pointer",
-                        fontSize: "16px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      {deleting ? (
-                        <>
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: "16px",
-                              height: "16px",
-                              border: "2px solid #f3f3f3",
-                              borderTop: "2px solid #3498db",
-                              borderRadius: "50%",
-                              animation: "spin 1s linear infinite",
-                            }}
-                          ></span>
-                          Deleting
-                        </>
-                      ) : (
-                        "Delete Image"
-                      )}
-                    </button>
                   </div>
                 </div>
               );
