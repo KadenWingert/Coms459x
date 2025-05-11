@@ -7,6 +7,7 @@ function App() {
   const [loadingImages, setLoadingImages] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     // Load API URL from config
@@ -134,8 +135,24 @@ function App() {
     } finally {
       setDeleting(false);
     }
-
   }
+
+  const handleSearch = async(e) => {
+    if(e.key === "Enter") {
+      e.preventDefault();
+      console.log("Search submitted:", query);
+      const results = images.filter((image) =>
+        image.name.toLowerCase().includes(query.toLowerCase())
+      );
+      if (results.length > 0) {
+        console.log("Matched images:", results);
+        setLoadingImages(results)
+      } else {
+        console.log("No images matched your search.");
+      }
+    }
+  }
+  
 
   return (
     <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
@@ -284,6 +301,7 @@ function App() {
                 "Delete Images"
               )}
           </button>
+          <input placeholder="Search Images" onChange={(e) => setQuery(e.target.value)} onKeyDown={handleSearch}></input>
         </div>
       </div>
 
