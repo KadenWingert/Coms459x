@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 
 function App() {
   const [file, setFile] = useState(null);
+  //const [delFile, setDelFile] = useState(null);
   const [images, setImages] = useState([]);
   const [apiUrl, setApiUrl] = useState("");
   const [loadingImages, setLoadingImages] = useState(false);
@@ -102,23 +103,26 @@ function App() {
     reader.readAsDataURL(file); // This reads the file as a data URL (base64)
   };
 
-  const handleDelete = async () => {
-    if (!file || !apiUrl) return;
+  const handleDelete = async (key) => {
+    if (!key || !apiUrl) return;
     setDeleting(true);
-    console.log("Disabled?", !apiUrl || !file || deleting);
-    console.log({ apiUrl, file, deleting });  
-    
+    console.log("Disabled?", !apiUrl || !key || deleting);
+    console.log({ apiUrl, key, deleting });
+
     try {
-      const response = await fetch(`${apiUrl}images?key=${encodeURIComponent(file.name)}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
-        body: JSON.stringify({
-          file_name: file.name,
-        })
-      });
+      const response = await fetch(
+        `${apiUrl}images?key=${encodeURIComponent(key)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          mode: "cors",
+          body: JSON.stringify({
+            file_name: key,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -135,24 +139,23 @@ function App() {
     } finally {
       setDeleting(false);
     }
-  }
+  };
 
-  const handleSearch = async(e) => {
-    if(e.key === "Enter") {
+  const handleSearch = async (e) => {
+    if (e.key === "Enter") {
       e.preventDefault();
       console.log("Search submitted:", query);
       const results = images.filter((image) =>
-        image.name.toLowerCase().includes(query.toLowerCase())
+        image.key.toLowerCase().includes(query.toLowerCase())
       );
       if (results.length > 0) {
         console.log("Matched images:", results);
-        setLoadingImages(results)
+        setImages(results);
       } else {
         console.log("No images matched your search.");
       }
     }
-  }
-  
+  };
 
   return (
     <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
@@ -227,22 +230,23 @@ function App() {
             opacity: uploading ? 0.7 : 1,
           }}
         />
-        <div style={{display: "flex", gap: "20px"}}>
+        <div style={{ display: "flex", gap: "20px" }}>
           <button
-          onClick={handleUpload}
-          disabled={!apiUrl || !file || uploading}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: !apiUrl || !file || uploading ? "#ddd" : "#4CAF50",
-            color: !apiUrl || !file || uploading ? "#777" : "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: !apiUrl || !file || uploading ? "not-allowed" : "pointer",
-            fontSize: "16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
+            onClick={handleUpload}
+            disabled={!apiUrl || !file || uploading}
+            style={{
+              padding: "10px 20px",
+              backgroundColor:
+                !apiUrl || uploading ? "#ddd" : "#4CAF50",
+              color: !apiUrl || !file || uploading ? "#777" : "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: !apiUrl || !file || uploading ? "not-allowed" : "pointer",
+              fontSize: "16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
             }}
           >
             {uploading ? (
@@ -264,44 +268,11 @@ function App() {
               "Upload Image"
             )}
           </button>
-          <button
-            onClick={handleDelete}
-            disabled={!apiUrl || !file || deleting}
-            //disabled={false}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: !apiUrl || !file || deleting ? "#f5b5b5" : "#e02424",
-                color: !apiUrl || !file || deleting ? "#777" : "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: !apiUrl || !file || deleting ? "not-allowed" : "pointer",
-                fontSize: "16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
-              >
-              {deleting ? (
-                <>
-                  <span
-                      style={{
-                        display: "inline-block",
-                        width: "16px",
-                        height: "16px",
-                        border: "2px solid #f3f3f3",
-                        borderTop: "2px solid #3498db",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                  ></span>
-                    Deleting
-                </>
-                ) : (
-                "Delete Images"
-              )}
-          </button>
-          <input placeholder="Search Images" onChange={(e) => setQuery(e.target.value)} onKeyDown={handleSearch}></input>
+          <input
+            placeholder="Search Images"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleSearch}
+          ></input>
         </div>
       </div>
 
@@ -380,6 +351,47 @@ function App() {
                     >
                       Uploaded: {new Date(image.lastModified).toLocaleString()}
                     </p>
+                    <button
+                      onClick={() => handleDelete(image.key)}
+                      disabled={!apiUrl || deleting}
+                      //disabled={false}
+                      style={{
+                        padding: "10px 20px",
+                        backgroundColor:
+                          !apiUrl || deleting ? "#f5b5b5" : "#e02424",
+                        color: !apiUrl || deleting ? "#777" : "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor:
+                          !apiUrl || deleting
+                            ? "not-allowed"
+                            : "pointer",
+                        fontSize: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      {deleting ? (
+                        <>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "16px",
+                              height: "16px",
+                              border: "2px solid #f3f3f3",
+                              borderTop: "2px solid #3498db",
+                              borderRadius: "50%",
+                              animation: "spin 1s linear infinite",
+                            }}
+                          ></span>
+                          Deleting
+                        </>
+                      ) : (
+                        "Delete Image"
+                      )}
+                    </button>
                   </div>
                 </div>
               );
